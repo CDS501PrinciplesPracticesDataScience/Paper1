@@ -1,0 +1,222 @@
+---
+title: "Covid-19 Tweets EDA"
+output: html_notebook
+---
+
+```{r echo=FALSE, warning=FALSE}
+library(tidyverse)
+library(reshape2)
+library(ggpubr)
+```
+
+```{r echo=FALSE, warning=FALSE}
+df <- read.csv('data/V2_vaccination_all_tweet_with_sentiments.csv')
+df$sentiment_category <- factor(df$sentiment_category, levels = c("positive", "neutral", "negative"))
+colors <- c('chartreuse3','#00BFC4','#F8766D')
+head(df)
+```
+
+
+```{r echo=FALSE, warning=FALSE}
+sentiments <- df %>%
+  select(anger,anticipation,disgust,fear,joy,sadness,surprise,trust) %>%
+  colSums() %>%
+  melt() 
+sentiments_df <- cbind(sentiments = rownames(sentiments), sentiments)
+sentiments_df %>%
+  mutate(sentiments = fct_reorder(sentiments, desc(value))) %>%
+  ggplot(aes(x=sentiments, y=value, fill=as.factor(sentiments))) +
+  geom_bar(stat = 'identity') +
+  scale_fill_discrete(name = 'Sentiments') +
+  labs(y = 'Total Scores', x ='Sentiment') +
+  ggtitle('Sentiments Score in Covid-19 Tweets') +
+  geom_text(aes(x=sentiments, y=value, label=value), vjust=2) +
+  theme(axis.text.x = element_text(angle=45)) 
+```
+
+```{r encho=FALSE, warning=FALSE}
+df %>%
+  select(sentiment_category) %>%
+  ggplot(aes(sentiment_category,fill=sentiment_category)) +
+  geom_bar() +
+  labs(y = 'Count', x ='Sentiment Category') +
+  geom_text(stat='count',aes(label=..count..),vjust=2) +
+  ggtitle('Sentiments Category in Covid-19 Tweets') +
+  scale_fill_manual(values=colors)
+```
+
+```{r encho=FALSE, warning=FALSE}
+top10_country <- df %>%
+  filter(!is.na(extracted_location)&extracted_location!='') %>%
+  group_by(extracted_location) %>%
+  summarise(count = n()) %>%
+  top_n(10)
+  
+data <- df %>%
+  filter(extracted_location %in% top10_country$extracted_location) %>%
+  select(sentiment_category, extracted_location)
+
+percentData <- data %>% 
+  group_by(extracted_location) %>% 
+  count(sentiment_category) %>%
+  mutate(ratio=round((n/sum(n)*100),1))
+
+ggplot(percentData, aes(extracted_location, y=ratio, fill=sentiment_category)) +
+  geom_bar(stat = 'identity', position='fill') +
+  labs(y = 'Percentage', x ='Country') +
+  scale_y_continuous(labels=scales::percent_format(accuracy = 1)) +
+  labs(y = 'Percentage', x ='Sentiments') +
+  ggtitle('Sentiments Category by Top 10 Countries') +
+  geom_text(aes(x=extracted_location, y=ratio/100, label=paste(ratio,'%')), position=position_fill(vjust=0.5), size = 3）+
+  theme(axis.text.x = element_text(angle=90)) +
+  scale_fill_manual(values=colors)
+```
+
+```{r echo=False, warning=FALSE}
+hashtags_sentiments <- read_csv('data/hashtags_sentiments.csv')
+hashtags_sentiments <- hashtags_sentiments[complete.cases(hashtags_sentiments), ]
+hashtags_sentiments <- hashtags_sentiments %>%
+  select(-extracted_location) %>%
+  group_by(hashtag) %>%
+  summarise(positive = sum(positive), 
+            negative = sum(negative), 
+            neutral  = sum(neutral),
+            trust = sum(trust),
+            anticipation = sum(anticipation),
+            fear = sum(fear),
+            sadness = sum(sadness),
+            joy = sum(joy),
+            anger = sum(anger),
+            suprise = sum(suprise),
+            disgust = sum(disgust))
+hashtags_sentiments$total <- hashtags_sentiments %>%
+  select(-c('hashtag')) %>%
+  rowSums()
+
+hashtags_sentiments <- hashtags_sentiments %>% 
+  filter(hashtag %in% c('#PfizerBioNTech','#Sinopharm','#Sinovac','#Moderna','#OxfordAstraZeneca','#Covaxin','#SputnikV')) %>%
+  select(hashtag, positive, negative, neutral) %>%
+  melt()
+
+percentData <- hashtags_sentiments %>% 
+  group_by(hashtag) %>% 
+  mutate(ratio=round(value/sum(value)*100,1))
+
+percentData$variable <- factor(percentData$variable, levels = c("positive", "neutral", "negative"))
+
+ggplot(percentData, aes(x=hashtag, y=ratio, fill=variable)) +
+  geom_bar(stat = 'identity', position='fill') +
+  scale_fill_discrete(name = 'Sentiments') +
+  scale_y_continuous(labels=scales::percent_format(accuracy = 1)) +
+  labs(y = 'Percentage', x ='Sentiments') +
+  ggtitle("Sentiments Score by Vaccine Types") +
+  geom_text(aes(x=hashtag, y=ratio/100, label=paste(ratio,'%')), position=position_fill(vjust=0.5)）+
+  theme(axis.text.x = element_text(angle=90)) +
+  scale_fill_manual(values=colors)
+
+```
+
+```{r echo=False, warning=FALSE}
+hashtags_sentiments <- read_csv('data/hashtags_sentiments.csv')
+hashtags_sentiments <- hashtags_sentiments[complete.cases(hashtags_sentiments), ]
+hashtags_sentiments <- hashtags_sentiments %>%
+  group_by(hashtag, extracted_location) %>%
+  summarise(positive = sum(positive), 
+            negative = sum(negative), 
+            neutral  = sum(neutral),
+            trust = sum(trust),
+            anticipation = sum(anticipation),
+            fear = sum(fear),
+            sadness = sum(sadness),
+            joy = sum(joy),
+            anger = sum(anger),
+            suprise = sum(suprise),
+            disgust = sum(disgust))
+#hashtags_sentiments$total <- hashtags_sentiments %>%
+#  select(-hashtag) %>%
+#  rowSums()
+
+hashtags_sentiments <- hashtags_sentiments %>% 
+  filter(hashtag %in% c('#PfizerBioNTech','#Sinopharm','#Sinovac','#Moderna','#OxfordAstraZeneca','#Covaxin','#SputnikV')) %>%
+  select(hashtag, extracted_location, positive) %>%
+  melt()
+
+hashtags_sentiments <- hashtags_sentiments %>%
+  filter(extracted_location %in% top10_country$extracted_location) 
+
+percentData <- hashtags_sentiments %>% 
+  group_by(extracted_location) %>% 
+  mutate(ratio=round(value/sum(value)*100,1))
+percentData$ratio2 <- ifelse(percentData$ratio > 5, percentData$ratio, NA)
+
+percentData$variable <- factor(percentData$variable, levels = c("positive", "neutral", "negative"))
+
+ggplot(percentData, aes(x=extracted_location, y=ratio, fill=hashtag)) +
+  geom_bar(stat = 'identity', position='fill') +
+  scale_fill_discrete(name = 'Sentiments') +
+  scale_y_continuous(labels=scales::percent_format(accuracy = 1)) +
+  labs(y = 'Percentage', x ='Country') +
+  ggtitle("Positive Sentiments in Top 10 Countries towards Vaccines") +
+  geom_text(aes(x=extracted_location, y=ratio2/100, label=paste(ratio2,'%')), position=position_fill(vjust=0.5), size = 3）+
+  theme(axis.text.x = element_text(angle=90))
+
+```
+
+```{r echo=False, warning=FALSE, out.height="50%"}
+hashtags_sentiments <- read_csv('data/hashtags_sentiments.csv')
+hashtags_sentiments <- hashtags_sentiments[complete.cases(hashtags_sentiments), ]
+
+plot_chart <- function(vaccine_type){
+  tmp <- hashtags_sentiments %>% 
+  filter(hashtag %in% c(vaccine_type)) %>%
+  select(hashtag, positive, negative, neutral, extracted_location) %>%
+  melt() 
+  top10_country <- tmp %>%
+    filter(!is.na(extracted_location)&extracted_location!='') %>%
+    group_by(extracted_location) %>%
+    summarise(value = sum(value)) %>%
+    top_n(10)
+  tmp <- tmp %>%
+    filter(extracted_location %in% top10_country$extracted_location)
+  percentData <- tmp %>% 
+    group_by(extracted_location) %>% 
+    mutate(ratio=round(value/sum(value)*100,1))
+
+  percentData$variable <- factor(percentData$variable, levels = c("positive", "neutral", "negative"))
+
+  p <- ggplot(percentData, aes(x=extracted_location, y=ratio, fill=variable)) +
+    geom_bar(stat = 'identity', position='fill') +
+    scale_fill_discrete(name = 'Sentiments') +
+    scale_y_continuous(labels=scales::percent_format(accuracy = 1)) +
+    labs(y = 'Percentage', x ='Sentiments') +
+    ggtitle(paste0(vaccine_type,' in Top 10 Countries')) +
+    geom_text(aes(x=extracted_location, y=ratio/100, label=paste(ratio,'%')), position=position_fill(vjust=0.5)）+
+    theme(axis.text.x = element_text(angle=90)) +
+    scale_fill_manual(values=colors)
+  p
+  return(p)
+}
+p1 <- plot_chart('#PfizerBioNTech')
+p2 <- plot_chart('#Sinopharm')
+p3 <- plot_chart('#Sinovac')
+p4 <- plot_chart('#Moderna')
+p5 <- plot_chart('#OxfordAstraZeneca')
+p6 <- plot_chart('#Covaxin')
+p7 <- plot_chart('#SputnikV')
+
+p1
+p2
+p3
+p4
+p5
+p6
+p7
+```
+
+
+
+
+
+
+
+
